@@ -93,10 +93,6 @@ func TestCpuUseMy(t *testing.T) {
 
 func TestCpuUseIngo(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	// w := newWheel(1, 1000)
-	// if w == nil {
-
-	// }
 	var wg sync.WaitGroup
 	taskCnt := 100000
 	wg.Add(taskCnt)
@@ -112,9 +108,6 @@ func TestCpuUseIngo(t *testing.T) {
 func TestTicker(t *testing.T) {
 	w := NewWheel(1, 1024)
 	ticker := w.NewTicker(1000 * time.Millisecond)
-	// time.AfterFunc(4*time.Second, func() {
-	// 	ticker.Stop()
-	// })
 	for {
 		<-ticker.C
 		log.Println("run ticker trigger")
@@ -206,5 +199,9 @@ func TestGetBucketSize(t *testing.T) {
 	t.Logf("ret:%d", size)
 	if size != 2048 {
 		t.Errorf("get bucket size:%d err", size)
+	}
+	size = getBucketSize(1024)
+	if size != 1024 {
+		t.Errorf("get bucket size 1024 err real:%d", size)
 	}
 }
