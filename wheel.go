@@ -1,6 +1,7 @@
 package mytimewheel
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -19,6 +20,7 @@ type wheel struct {
 }
 
 func NewWheel(tickMs, size int64) *wheel {
+	size = getBucketSize(size)
 	buckets := make([]*bucket, size)
 	for i := range buckets {
 		buckets[i] = newBucket()
@@ -45,12 +47,12 @@ func (w *wheel) add(t *timer) bool {
 		if index > 0 {
 			index--
 		}
-		index = (w.pos + index) % w.size
+		// index = (w.pos + index) % w.size
+		index = (w.pos + index) & (w.size - 1)
 		b := w.buckets[index]
 		b.addTimer(t)
 		return true
 	} else {
-
 		parentWheel := atomic.LoadPointer(&w.parent)
 		if parentWheel == nil {
 			parent := NewWheel(w.interval, w.size)
@@ -72,8 +74,8 @@ func (w *wheel) run() {
 		for {
 			<-w.ticker.C
 			bucket := w.buckets[w.pos]
-			w.pos = (w.pos + 1) % w.size
-			// w.pos = (w.pos + 1) & (w.size - 1)
+			// w.pos = (w.pos + 1) % w.size
+			w.pos = (w.pos + 1) & (w.size - 1)
 			if w.child == nil { //最底层
 				bucket.runTimerTask()
 			} else { //上层
@@ -91,10 +93,109 @@ func (w *wheel) run() {
 	}()
 }
 
+func (w *wheel) addOrRun(t *timer) {
+	if !w.add(t) {
+		go t.task()
+	}
+}
+
 func (w *wheel) AfterFunc(d time.Duration, task func()) {
 	expire := time.Now().Add(d).UnixNano() / int64(time.Millisecond)
 	t := newTimer(expire, task)
-	if !w.add(t) {
-		task()
+	// if !w.add(t) {
+	// 	go task()
+	// }
+	w.addOrRun(t)
+}
+
+type MyTicker struct {
+	stopflag int32
+	C        chan struct{}
+}
+
+func (mt *MyTicker) GetC() <-chan struct{} {
+	return mt.C
+}
+
+func (mt *MyTicker) Stop() {
+	atomic.StoreInt32(&mt.stopflag, 1)
+}
+
+func (w *wheel) NewTicker(d time.Duration) *MyTicker {
+	myTicker := &MyTicker{
+		stopflag: 0,
+		C:        make(chan struct{}, 1),
 	}
+	var t *timer
+	t = &timer{
+		expire: time.Now().Add(d).UnixNano() / int64(time.Millisecond),
+		task: func() {
+			if atomic.LoadInt32(&myTicker.stopflag) != 1 {
+				select {
+				case myTicker.C <- struct{}{}:
+				default:
+				}
+				expire := t.expire + int64(d/time.Millisecond)
+				t.expire = expire
+				w.addOrRun(t)
+			} else {
+				close(myTicker.C)
+			}
+		},
+	}
+	w.addOrRun(t)
+	return myTicker
+}
+
+func (w *wheel) Schedue(d time.Duration, f func()) {
+	var t *timer
+	t = &timer{
+		expire: time.Now().Add(d).UnixNano() / int64(time.Millisecond),
+		task: func() {
+			expire := t.expire + int64(d/time.Millisecond)
+			t.expire = expire
+			w.addOrRun(t)
+			f()
+		},
+	}
+	w.addOrRun(t)
+}
+
+func (w *wheel) SchedueWithTimes(d time.Duration, times int32, f func()) {
+	var t *timer
+	var cnt int32
+	if times < 1 {
+		w.Schedue(d, f)
+		return
+	}
+	t = &timer{
+		expire: time.Now().Add(d).UnixNano() / int64(time.Millisecond),
+		task: func() {
+			if atomic.LoadInt32(&cnt) < times {
+				expire := t.expire + int64(d/time.Millisecond)
+				t.expire = expire
+				w.addOrRun(t)
+				f()
+				atomic.AddInt32(&cnt, 1)
+			}
+		},
+	}
+	w.addOrRun(t)
+}
+
+func getBucketSize(num int64) int64 {
+	num = num - 1
+	num |= num >> 1
+	num |= num >> 2
+	num |= num >> 4
+	num |= num >> 8
+	num |= num >> 16
+	num |= num >> 32
+	if num < 0 {
+		return 1
+	}
+	if num > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return num + 1
 }

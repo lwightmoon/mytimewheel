@@ -31,7 +31,6 @@ func (b *bucket) addTimer(t *timer) {
 	b.Lock()
 	defer b.Unlock()
 	b.timers = append(b.timers, t)
-	// log.Info("add timer")
 }
 
 func (b *bucket) getTimers() []*timer {
@@ -45,9 +44,10 @@ func (b *bucket) getTimers() []*timer {
 // runTimerTask
 func (b *bucket) runTimerTask() {
 	b.Lock()
-	defer b.Unlock()
-	for _, timer := range b.timers {
+	timers := b.timers
+	b.timers = make([]*timer, 0)
+	b.Unlock()
+	for _, timer := range timers {
 		go timer.task()
 	}
-	b.timers = make([]*timer, 0)
 }

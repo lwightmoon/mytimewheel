@@ -1,8 +1,12 @@
 package mytimewheel
 
 import (
+	"fmt"
+	"log"
 	"math/rand"
+	"os"
 	"runtime"
+	"runtime/pprof"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,7 +14,7 @@ import (
 )
 
 func TestAfter(t *testing.T) {
-	w := NewWheel(1, 1000)
+	w := NewWheel(1, 1024)
 	now := time.Now().Unix()
 	w.AfterFunc(2*time.Second, func() {
 		end := time.Now().Unix()
@@ -36,7 +40,7 @@ func TestAfter(t *testing.T) {
 func TestTask(t *testing.T) {
 	var cnt int64
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	w := NewWheel(1, 1000)
+	w := NewWheel(1, 1024)
 	if w == nil {
 
 	}
@@ -44,7 +48,7 @@ func TestTask(t *testing.T) {
 	taskCnt := 100000
 	wg.Add(taskCnt)
 	for i := 0; i < taskCnt; i++ {
-		d := rand.Int63n(10000)
+		d := rand.Int63n(10000) + 1
 		// start := time.Now().UnixNano() / int64(time.Millisecond)
 		w.AfterFunc(time.Duration(d)*time.Millisecond, func() {
 			defer wg.Done()
@@ -67,6 +71,9 @@ func TestTask(t *testing.T) {
 }
 
 func TestCpuUseMy(t *testing.T) {
+	file, _ := os.Create("cpu_profile")
+	pprof.StartCPUProfile(file)
+	defer pprof.StopCPUProfile()
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	w := NewWheel(1, 1024)
 	if w == nil {
@@ -82,7 +89,6 @@ func TestCpuUseMy(t *testing.T) {
 		})
 	}
 	wg.Wait()
-	//
 }
 
 func TestCpuUseIngo(t *testing.T) {
@@ -103,14 +109,102 @@ func TestCpuUseIngo(t *testing.T) {
 	wg.Wait()
 }
 
-func TestSleep(t *testing.T) {
-	size := 1024
-	a := 2
+func TestTicker(t *testing.T) {
+	w := NewWheel(1, 1024)
+	ticker := w.NewTicker(1000 * time.Millisecond)
+	// time.AfterFunc(4*time.Second, func() {
+	// 	ticker.Stop()
+	// })
 	for {
-		time.Sleep(time.Millisecond)
-		b := a % size
-		if b == 0 {
+		<-ticker.C
+		log.Println("run ticker trigger")
+	}
+}
 
-		}
+func TestManyIngoTicker(t *testing.T) {
+	for i := 0; i < 100000; i++ {
+		d := rand.Int63n(10000) + 1
+		ticker := time.NewTicker(time.Duration(d) * time.Millisecond)
+		go func(tc *time.Ticker) {
+			for {
+				<-ticker.C
+			}
+		}(ticker)
+	}
+	time.Sleep(10000 * time.Second)
+}
+
+func TestManyMyTicker(t *testing.T) {
+	w := NewWheel(1, 1024)
+	for i := 0; i < 100000; i++ {
+		d := rand.Int63n(10000) + 1
+		ticker := w.NewTicker(time.Duration(d) * time.Millisecond)
+		go func(tc *MyTicker) {
+			for {
+				<-tc.C
+			}
+		}(ticker)
+	}
+	if true {
+
+	}
+	time.Sleep(10000 * time.Second)
+}
+func TestManySchedule(t *testing.T) {
+	w := NewWheel(1, 1024)
+
+	for i := 0; i < 100000; i++ {
+		d := rand.Int63n(10000) + 1
+		w.Schedue(time.Duration(d)*time.Millisecond, func() {})
+	}
+	if true {
+
+	}
+	time.Sleep(10000 * time.Second)
+}
+func TestSchedule(t *testing.T) {
+	w := NewWheel(1, 1024)
+	var cnt int32
+	w.Schedue(500*time.Millisecond, func() {
+		log.Println("ticker...")
+		atomic.AddInt32(&cnt, 1)
+	})
+	time.Sleep(5 * time.Second)
+	if cnt != 10 {
+		t.Errorf("schedule cnt err cnt:%d", cnt)
+	}
+}
+func TestTimesSchedule(t *testing.T) {
+	w := NewWheel(1, 1024)
+	var cnt int
+	w.SchedueWithTimes(time.Second, 3, func() {
+		log.Println("ticker...")
+		cnt++
+	})
+	time.Sleep(6 * time.Second)
+	if cnt != 3 {
+		t.Errorf("run times fail:%d", cnt)
+	}
+
+}
+func TestIngoSigleTicker(t *testing.T) {
+	er := time.NewTicker(time.Second)
+	go func() {
+		time.Sleep(2 * time.Second)
+		er.Stop()
+	}()
+	for {
+		<-er.C
+		fmt.Println("triget")
+		time.Sleep(2 * time.Second)
+	}
+
+}
+
+func TestGetBucketSize(t *testing.T) {
+	size := getBucketSize(1025)
+	t.Logf("ret:%d", size)
+	if size != 2048 {
+		t.Errorf("get bucket size:%d err", size)
 	}
 }
