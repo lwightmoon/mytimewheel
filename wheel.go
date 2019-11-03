@@ -14,9 +14,8 @@ type Wheel struct {
 	ticker   *time.Ticker
 	child    *Wheel
 	parent   unsafe.Pointer
-	// curTime  int64
-	pos     int64 //此刻的时间轮
-	buckets []*bucket
+	pos      int64 //此刻的时间轮
+	buckets  []*bucket
 }
 
 func NewDefaultWheel() *Wheel {
@@ -42,7 +41,6 @@ func NewWheel(tickMs, size int64) *Wheel {
 }
 
 func (w *Wheel) add(t *Timer) bool {
-	// curtime := atomic.LoadInt64(&w.curTime)
 	curtime := time.Now().UnixNano() / int64(time.Millisecond)
 	if t.expire < curtime+w.tick {
 		return false
