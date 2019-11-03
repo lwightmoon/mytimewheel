@@ -41,7 +41,7 @@ func NewWheel(tickMs, size int64) *Wheel {
 	return wheel
 }
 
-func (w *Wheel) add(t *timer) bool {
+func (w *Wheel) add(t *Timer) bool {
 	// curtime := atomic.LoadInt64(&w.curTime)
 	curtime := time.Now().UnixNano() / int64(time.Millisecond)
 	if t.expire < curtime+w.tick {
@@ -97,7 +97,7 @@ func (w *Wheel) run() {
 	}()
 }
 
-func (w *Wheel) addOrRun(t *timer) {
+func (w *Wheel) addOrRun(t *Timer) {
 	if !w.add(t) {
 		go t.task()
 	}
@@ -127,8 +127,8 @@ func (w *Wheel) NewTicker(d time.Duration) *MyTicker {
 		stopflag: 0,
 		C:        make(chan struct{}, 1),
 	}
-	var t *timer
-	t = &timer{
+	var t *Timer
+	t = &Timer{
 		expire: time.Now().Add(d).UnixNano() / int64(time.Millisecond),
 		task: func() {
 			if atomic.LoadInt32(&myTicker.stopflag) != 1 {
@@ -148,9 +148,9 @@ func (w *Wheel) NewTicker(d time.Duration) *MyTicker {
 	return myTicker
 }
 
-func (w *Wheel) Schedue(d time.Duration, f func()) {
-	var t *timer
-	t = &timer{
+func (w *Wheel) Schedue(d time.Duration, f func()) *Timer {
+	var t *Timer
+	t = &Timer{
 		expire: time.Now().Add(d).UnixNano() / int64(time.Millisecond),
 		task: func() {
 			expire := t.expire + int64(d/time.Millisecond)
@@ -160,16 +160,17 @@ func (w *Wheel) Schedue(d time.Duration, f func()) {
 		},
 	}
 	w.addOrRun(t)
+	return t
 }
 
-func (w *Wheel) SchedueWithTimes(d time.Duration, times int32, f func()) {
-	var t *timer
+func (w *Wheel) SchedueWithTimes(d time.Duration, times int32, f func()) *Timer {
+	var t *Timer
 	var cnt int32
 	if times < 1 {
-		w.Schedue(d, f)
-		return
+		t = w.Schedue(d, f)
+		return t
 	}
-	t = &timer{
+	t = &Timer{
 		expire: time.Now().Add(d).UnixNano() / int64(time.Millisecond),
 		task: func() {
 			if atomic.LoadInt32(&cnt) < times {
@@ -182,6 +183,7 @@ func (w *Wheel) SchedueWithTimes(d time.Duration, times int32, f func()) {
 		},
 	}
 	w.addOrRun(t)
+	return t
 }
 
 // copy java hashmap tableSizeFor 取>num的最小2的n次幂

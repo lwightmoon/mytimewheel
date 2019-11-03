@@ -174,12 +174,12 @@ func TestManySchedule(t *testing.T) {
 func TestSchedule(t *testing.T) {
 	w := NewWheel(1, 1024)
 	var cnt int32
-	w.Schedue(500*time.Millisecond, func() {
-		log.Println("ticker...")
+	w.Schedue(time.Second, func() {
+		log.Println("ticker+...")
 		atomic.AddInt32(&cnt, 1)
 	})
-	time.Sleep(5 * time.Second)
-	if cnt != 10 {
+	time.Sleep(5500 * time.Millisecond)
+	if cnt != 5 {
 		t.Errorf("schedule cnt err cnt:%d", cnt)
 	}
 }
@@ -219,5 +219,23 @@ func TestGetBucketSize(t *testing.T) {
 	size = getBucketSize(1024)
 	if size != 1024 {
 		t.Errorf("get bucket size 1024 err real:%d", size)
+	}
+}
+
+func TestStop(t *testing.T) {
+	w := NewDefaultWheel()
+	var cnt int32
+	timer := w.Schedue(time.Second, func() {
+		fmt.Println("ticker...")
+		atomic.AddInt32(&cnt, 1)
+	})
+	w.AfterFunc(5*time.Second, func() {
+		timer.Stop()
+	})
+
+	time.Sleep(10 * time.Second)
+	t.Logf("stop fail cnt:%d", cnt)
+	if atomic.LoadInt32(&cnt) >= 10 {
+		t.Errorf("stop fail cnt:%d", cnt)
 	}
 }

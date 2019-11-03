@@ -1,53 +1,70 @@
 package mytimewheel
 
 import (
+	"container/list"
 	"sync"
 )
 
 type bucket struct {
 	sync.Mutex
-	timers []*timer
+	// timers []*timer
+	timers *list.List
 }
 
 func newBucket() *bucket {
 	return &bucket{
-		timers: make([]*timer, 0),
+		timers: list.New(),
 	}
 }
 
-type timer struct {
-	expire int64
-	task   func()
-}
-
-func newTimer(expire int64, task func()) *timer {
-	return &timer{
-		expire: expire,
-		task:   task,
+func (b *bucket) delTimer(t *Timer) bool {
+	b.Lock()
+	defer b.Unlock()
+	if t.getBucket() != b {
+		return false
 	}
+	b.timers.Remove(t.e)
+	t.setBucket(nil)
+	t.e = nil
+	return true
 }
 
-func (b *bucket) addTimer(t *timer) {
+func (b *bucket) addTimer(t *Timer) {
 	b.Lock()
 	defer b.Unlock()
-	b.timers = append(b.timers, t)
+	e := b.timers.PushBack(t)
+	t.setBucket(b)
+	t.e = e
 }
 
-func (b *bucket) getTimers() []*timer {
+func (b *bucket) getTimers() []*Timer {
 	b.Lock()
 	defer b.Unlock()
-	timers := b.timers
-	b.timers = make([]*timer, 0)
+	// timers := b.timers
+	// b.timers = make([]*timer, 0)
+	// return timers
+	timers := make([]*Timer, 0)
+	e := b.timers.Front()
+	for e != nil {
+		next := e.Next()
+		timer := e.Value.(*Timer)
+		timers = append(timers, timer)
+		b.timers.Remove(e)
+		e = next
+	}
 	return timers
 }
 
 // runTimerTask
 func (b *bucket) runTimerTask() {
 	b.Lock()
-	timers := b.timers
-	b.timers = make([]*timer, 0)
-	b.Unlock()
-	for _, timer := range timers {
+	defer b.Unlock()
+	e := b.timers.Front()
+	for e != nil {
+		next := e.Next()
+		timer := e.Value.(*Timer)
+		b.timers.Remove(e)
 		go timer.task()
+		e = next
 	}
 }
