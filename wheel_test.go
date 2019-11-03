@@ -37,6 +37,22 @@ func TestAfter(t *testing.T) {
 	time.Sleep(3 * time.Second)
 }
 
+func TestMultiGAfter(t *testing.T) {
+	var cnt int32
+	w := NewDefaultWheel()
+	for i := 0; i < 10; i++ {
+		go func() {
+			w.AfterFunc(20*time.Millisecond, func() {
+				atomic.AddInt32(&cnt, 1)
+			})
+		}()
+	}
+	time.Sleep(time.Second)
+	if cnt != 10 {
+		t.Errorf("test multi fail cnt:%d", cnt)
+	}
+}
+
 func TestTask(t *testing.T) {
 	var cnt int64
 	runtime.GOMAXPROCS(runtime.NumCPU())
