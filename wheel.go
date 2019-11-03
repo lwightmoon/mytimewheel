@@ -19,6 +19,10 @@ type Wheel struct {
 	buckets []*bucket
 }
 
+func NewDefaultWheel() *Wheel {
+	return NewWheel(1, 1024)
+}
+
 func NewWheel(tickMs, size int64) *Wheel {
 	size = getBucketSize(size)
 	buckets := make([]*bucket, size)
