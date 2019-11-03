@@ -7,26 +7,26 @@ import (
 	"unsafe"
 )
 
-type wheel struct {
+type Wheel struct {
 	tick     int64
 	size     int64
 	interval int64
 	ticker   *time.Ticker
-	child    *wheel
+	child    *Wheel
 	parent   unsafe.Pointer
 	// curTime  int64
 	pos     int64 //此刻的时间轮
 	buckets []*bucket
 }
 
-func NewWheel(tickMs, size int64) *wheel {
+func NewWheel(tickMs, size int64) *Wheel {
 	size = getBucketSize(size)
 	buckets := make([]*bucket, size)
 	for i := range buckets {
 		buckets[i] = newBucket()
 	}
 	ticker := time.NewTicker(time.Duration(tickMs) * time.Millisecond)
-	wheel := &wheel{
+	wheel := &Wheel{
 		tick:     tickMs,
 		size:     size,
 		interval: tickMs * size,
@@ -37,7 +37,7 @@ func NewWheel(tickMs, size int64) *wheel {
 	return wheel
 }
 
-func (w *wheel) add(t *timer) bool {
+func (w *Wheel) add(t *timer) bool {
 	// curtime := atomic.LoadInt64(&w.curTime)
 	curtime := time.Now().UnixNano() / int64(time.Millisecond)
 	if t.expire < curtime+w.tick {
@@ -64,12 +64,12 @@ func (w *wheel) add(t *timer) bool {
 			)
 			parentWheel = atomic.LoadPointer(&w.parent)
 		}
-		ret := (*wheel)(parentWheel).add(t)
+		ret := (*Wheel)(parentWheel).add(t)
 		return ret
 	}
 }
 
-func (w *wheel) run() {
+func (w *Wheel) run() {
 	go func() {
 		for {
 			<-w.ticker.C
@@ -93,18 +93,15 @@ func (w *wheel) run() {
 	}()
 }
 
-func (w *wheel) addOrRun(t *timer) {
+func (w *Wheel) addOrRun(t *timer) {
 	if !w.add(t) {
 		go t.task()
 	}
 }
 
-func (w *wheel) AfterFunc(d time.Duration, task func()) {
+func (w *Wheel) AfterFunc(d time.Duration, task func()) {
 	expire := time.Now().Add(d).UnixNano() / int64(time.Millisecond)
 	t := newTimer(expire, task)
-	// if !w.add(t) {
-	// 	go task()
-	// }
 	w.addOrRun(t)
 }
 
@@ -121,7 +118,7 @@ func (mt *MyTicker) Stop() {
 	atomic.StoreInt32(&mt.stopflag, 1)
 }
 
-func (w *wheel) NewTicker(d time.Duration) *MyTicker {
+func (w *Wheel) NewTicker(d time.Duration) *MyTicker {
 	myTicker := &MyTicker{
 		stopflag: 0,
 		C:        make(chan struct{}, 1),
@@ -147,7 +144,7 @@ func (w *wheel) NewTicker(d time.Duration) *MyTicker {
 	return myTicker
 }
 
-func (w *wheel) Schedue(d time.Duration, f func()) {
+func (w *Wheel) Schedue(d time.Duration, f func()) {
 	var t *timer
 	t = &timer{
 		expire: time.Now().Add(d).UnixNano() / int64(time.Millisecond),
@@ -161,7 +158,7 @@ func (w *wheel) Schedue(d time.Duration, f func()) {
 	w.addOrRun(t)
 }
 
-func (w *wheel) SchedueWithTimes(d time.Duration, times int32, f func()) {
+func (w *Wheel) SchedueWithTimes(d time.Duration, times int32, f func()) {
 	var t *timer
 	var cnt int32
 	if times < 1 {
@@ -183,6 +180,7 @@ func (w *wheel) SchedueWithTimes(d time.Duration, times int32, f func()) {
 	w.addOrRun(t)
 }
 
+// copy java hashmap tableSizeFor 取>num的最小2的n次幂
 func getBucketSize(num int64) int64 {
 	num = num - 1
 	num |= num >> 1
